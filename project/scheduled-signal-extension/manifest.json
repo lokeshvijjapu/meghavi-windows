@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Scheduled Signal Sender",
+  "version": "1.0",
+  "description": "Sends signal to Flask at 5AM and 10PM daily",
+  "permissions": ["alarms"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

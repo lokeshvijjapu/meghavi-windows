@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Disable Gesture & Right‑Click",
+  "version": "1.0",
+  "description": "Blocks pinch‑to‑zoom, multi‑touch swipe, and right‑click on all open websites.",
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["blocker.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

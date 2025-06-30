@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Online Status Indicator",
+  "version": "1.0",
+  "description": "Shows a circle in the top-right corner indicating online or offline status.",
+  "permissions": ["scripting"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}

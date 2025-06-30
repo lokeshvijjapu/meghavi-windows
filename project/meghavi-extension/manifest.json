@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Meghavi URL Checker",
+  "version": "1.0",
+  "description": "Checks current tab URL and sends a POST request if it matches.",
+  "permissions": ["tabs", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}

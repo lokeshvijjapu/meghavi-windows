@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Disable Swipe Navigation",
+  "version": "1.0",
+  "description": "Blocks left/right swipe navigation gestures (back/forward) in the browser.",
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["disable-swipe.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

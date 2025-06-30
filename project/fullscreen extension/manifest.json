@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Fullscreen Launcher",
+  "version": "1.0",
+  "description": "Automatically opens the page in fullscreen mode.",
+  "permissions": ["tabs"],
+  "action": {
+    "default_title": "Auto Fullscreen"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -1,0 +1,30 @@
+#connection-status {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background-color: white;
+  border-radius: 24px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  z-index: 2147483647;
+  font-family: sans-serif;
+  font-size: 18px; /* Bigger text */
+}
+
+.status-dot {
+  width: 16px;      /* Bigger circle */
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 10px;
+  background-color: gray;
+}
+
+.online {
+  background-color: green !important;
+}
+
+.offline {
+  background-color: red !important;
+}
