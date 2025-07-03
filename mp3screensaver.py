@@ -11,15 +11,15 @@ os.environ["PATH"] = vlc_path + os.pathsep + os.environ["PATH"]
 os.environ["VLC_PLUGIN_PATH"] = vlc_path
 import vlc
 
-# Face distance estimation (YOLO box area → distance)
+# Face detection constants
 A = 9703.20
 B = -0.4911842338691967
 MODEL_PATH = "models/model.pt"
-FACE_DISTANCE_THRESHOLD = 110  # in cm
+FACE_DISTANCE_THRESHOLD = 110
 NO_FACE_TIMER_SECONDS = 5
 
-def run_vlc_loop_single_video():
-    """Plays a single video in loop fullscreen using VLC."""
+def run_vlc_loop_all_videos():
+    """Play all .mp4 videos in 'videos/' folder in loop, fullscreen, with sound."""
     video_folder = os.path.join(os.path.dirname(__file__), "videos")
     video_files = [f for f in os.listdir(video_folder) if f.lower().endswith(".mp4")]
 
@@ -27,9 +27,8 @@ def run_vlc_loop_single_video():
         print("⚠️ No .mp4 files found in 'videos' folder.")
         return
 
-    video_path = os.path.join(video_folder, video_files[0])  # pick the first .mp4
+    video_paths = [os.path.join(video_folder, f) for f in sorted(video_files)]
 
-    # VLC instance with fullscreen
     instance = vlc.Instance(
         "--no-video-title-show",
         "--fullscreen",
@@ -37,17 +36,17 @@ def run_vlc_loop_single_video():
         "--no-video-deco"
     )
 
-    media_list = instance.media_list_new([video_path])
+    media_list = instance.media_list_new(video_paths)
     list_player = instance.media_list_player_new()
     list_player.set_media_list(media_list)
-    list_player.set_playback_mode(vlc.PlaybackMode.loop)  # ✅ loop forever
+    list_player.set_playback_mode(vlc.PlaybackMode.loop)  # loop full playlist
+
     list_player.play()
 
-    # Ensure fullscreen takes effect
     time.sleep(0.5)
     try:
-        mp = list_player.get_media_player()
-        mp.set_fullscreen(True)
+        media_player = list_player.get_media_player()
+        media_player.set_fullscreen(True)
     except:
         pass
 
@@ -60,7 +59,7 @@ def run_vlc_loop_single_video():
         list_player.stop()
 
 def face_detection_loop():
-    """Continuously runs YOLO face detection and controls VLC screensaver."""
+    """Runs face detection and controls VLC screensaver logic."""
     model = YOLO(MODEL_PATH)
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -100,7 +99,7 @@ def face_detection_loop():
                     no_face_time = time.time()
                 elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
                     if not (screensaver_proc and screensaver_proc.is_alive()):
-                        screensaver_proc = Process(target=run_vlc_loop_single_video)
+                        screensaver_proc = Process(target=run_vlc_loop_all_videos)
                         screensaver_proc.start()
 
             time.sleep(0.1)
