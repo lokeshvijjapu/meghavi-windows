@@ -1,122 +1,111 @@
-import cv2
-import time
 import os
-from ultralytics import YOLO
+import sys
+import time
+import glob
+import cv2
 from multiprocessing import Process
-import webview
-import pygame  # Import pygame for audio handling
-import signal
+from ultralytics import YOLO
 
-# --- Distance calculation constants
+# 1) point to your VLC install
+vlc_path = r"C:\Program Files\VideoLAN\VLC"
+os.environ['PATH'] = vlc_path + os.pathsep + os.environ['PATH']
+os.environ['VLC_PLUGIN_PATH'] = vlc_path
+
+import vlc  # now safe to load 64‑bit VLC
+
+# --- face‑distance calibration
 A = 9703.20
 B = -0.4911842338691967
 MODEL_PATH = "models/model.pt"
+FACE_DISTANCE_THRESHOLD = 110       # cm
+NO_FACE_TIMER_SECONDS  = 5          # seconds
 
-# Global face distance threshold (cm)
-FACE_DISTANCE_THRESHOLD = 110
-# Global timer for screensaver activation (seconds)
-NO_FACE_TIMER_SECONDS = 5
+def run_vlc_screensaver():
+    """Play all .mp4 in ./videos full‑screen with sound, looping."""
+    video_folder = os.path.join(os.path.dirname(__file__), 'videos')
+    files = glob.glob(os.path.join(video_folder, '*.mp4'))
+    if not files:
+        return
 
-# --- Screensaver process using pywebview
-
-def run_webview():
-    # Point to the root of the Flask server, which now serves the video screensaver page
-    webview.create_window(
-        'Screensaver',
-        'http://localhost:5000/',
-        frameless=True,
-        fullscreen=True,
-        on_top=True
+    instance = vlc.Instance(
+        "--no-video-title-show",
+        "--loop",
+        "--fullscreen",
+        "--video-on-top",
+        "--no-video-deco"
     )
-    webview.start()
 
-def run_audio():
-    # Initialize pygame mixer
-    pygame.mixer.init()
-    # Load the audio file (use the full path to the MP3 file on Windows)
-    pygame.mixer.music.load('C:/Users/meghavi/project/camera/audio.mp3')  # Update this path
-    # Play the audio file in a loop indefinitely
-    pygame.mixer.music.play(loops=-1, start=0.0)  # Loops indefinitely
+    media_list = instance.media_list_new(files)
+    list_player = instance.media_list_player_new()
+    list_player.set_media_list(media_list)
+    list_player.play()
 
-    # Keep the audio running until it's stopped
-    while pygame.mixer.music.get_busy():  # Wait until the audio is finished
-        pygame.time.Clock().tick(10)
+    # ensure fullscreen
+    time.sleep(0.5)
+    try:
+        mp = list_player.get_media_player()
+        mp.set_fullscreen(True)
+    except:
+        pass
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        list_player.stop()
 
 def face_detection_loop():
+    """Continuously detect faces; spawn/kill VLC as needed."""
     model = YOLO(MODEL_PATH)
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        return
+
     screensaver_proc = None
-    audio_proc = None
-    no_face_start = None
-    frame_count = 0
-    last_face_in_range = False
+    no_face_time   = None
+
     try:
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            print("Unable to access webcam.")
-            return
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("Failed to grab frame.")
                 break
-            frame_count += 1
-            # Only run YOLO every 5th frame
-            if frame_count % 5 == 0:
-                results = model(frame, conf=0.4, verbose=False)
-                detections = results[0].boxes
-                face_in_range = False
-                if detections is not None:
-                    for box in detections:
-                        conf = float(box.conf[0])
-                        if conf < 0.4:
-                            continue
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        area_px = (x2 - x1) * (y2 - y1)
-                        distance = A * (area_px ** B)
-                        if distance < FACE_DISTANCE_THRESHOLD:
-                            face_in_range = True
-                            break 
 
-                last_face_in_range = face_in_range
-            else:
-                face_in_range = last_face_in_range
-            now = time.time()
-            if not face_in_range:
-                if no_face_start is None:
-                    no_face_start = now
-                elif now - no_face_start >= NO_FACE_TIMER_SECONDS:
-                    if screensaver_proc is None or not screensaver_proc.is_alive():
-                        # Start both the screensaver and audio processes
-                        screensaver_proc = Process(target=run_webview)
-                        audio_proc = Process(target=run_audio)
-                        screensaver_proc.start()
-                        audio_proc.start()
-            else:
-                no_face_start = None
-                if screensaver_proc is not None and screensaver_proc.is_alive():
-                    screensaver_proc.terminate()  # Terminate the screensaver
-                    screensaver_proc.join()  # Wait for the screensaver process to finish
+            results = model(frame, conf=0.4, verbose=False)
+            boxes   = results[0].boxes
+            face_in_range = False
+
+            if boxes is not None:
+                for box in boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    area_px = (x2-x1)*(y2-y1)
+                    distance = A * (area_px ** B)
+                    if distance < FACE_DISTANCE_THRESHOLD:
+                        face_in_range = True
+                        break
+
+            if face_in_range:
+                no_face_time = None
+                if screensaver_proc and screensaver_proc.is_alive():
+                    screensaver_proc.terminate()
+                    screensaver_proc.join()
                     screensaver_proc = None
-                if audio_proc is not None and audio_proc.is_alive():
-                    audio_proc.terminate()  # Terminate the audio process
-                    audio_proc.join()  # Wait for the audio process to finish
-                    audio_proc = None
-            # Sleep a bit to reduce CPU usage
-            time.sleep(0.05)
-    except KeyboardInterrupt:
-        print("\nExiting...")
+            else:
+                if no_face_time is None:
+                    no_face_time = time.time()
+                elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
+                    if not (screensaver_proc and screensaver_proc.is_alive()):
+                        screensaver_proc = Process(target=run_vlc_screensaver)
+                        screensaver_proc.start()
+
+            time.sleep(0.1)
+
     finally:
         cap.release()
-        cv2.destroyAllWindows()
-        if screensaver_proc is not None and screensaver_proc.is_alive():
-            screensaver_proc.terminate()  # Ensure to terminate the screensaver
-            screensaver_proc.join()  # Ensure to join the process
-        if audio_proc is not None and audio_proc.is_alive():
-            audio_proc.terminate()  # Ensure to terminate the audio
-            audio_proc.join()  # Ensure to join the process
-
-def main():
-    face_detection_loop()
+        if screensaver_proc and screensaver_proc.is_alive():
+            screensaver_proc.terminate()
+            screensaver_proc.join()
 
 if __name__ == "__main__":
-    main()
+    face_detection_loop()
