@@ -1,46 +1,49 @@
 import os
 import sys
 import time
-import glob
 import cv2
 from multiprocessing import Process
 from ultralytics import YOLO
 
-# 1) point to your VLC install
+# VLC setup
 vlc_path = r"C:\Program Files\VideoLAN\VLC"
-os.environ['PATH'] = vlc_path + os.pathsep + os.environ['PATH']
-os.environ['VLC_PLUGIN_PATH'] = vlc_path
+os.environ["PATH"] = vlc_path + os.pathsep + os.environ["PATH"]
+os.environ["VLC_PLUGIN_PATH"] = vlc_path
+import vlc
 
-import vlc  # now safe to load 64‑bit VLC
-
-# --- face‑distance calibration
+# Face distance estimation (YOLO box area → distance)
 A = 9703.20
 B = -0.4911842338691967
 MODEL_PATH = "models/model.pt"
-FACE_DISTANCE_THRESHOLD = 110       # cm
-NO_FACE_TIMER_SECONDS  = 5          # seconds
+FACE_DISTANCE_THRESHOLD = 110  # in cm
+NO_FACE_TIMER_SECONDS = 5
 
-def run_vlc_screensaver():
-    """Play all .mp4 in ./videos full‑screen with sound, looping."""
-    video_folder = os.path.join(os.path.dirname(__file__), 'videos')
-    files = glob.glob(os.path.join(video_folder, '*.mp4'))
-    if not files:
+def run_vlc_loop_single_video():
+    """Plays a single video in loop fullscreen using VLC."""
+    video_folder = os.path.join(os.path.dirname(__file__), "videos")
+    video_files = [f for f in os.listdir(video_folder) if f.lower().endswith(".mp4")]
+
+    if not video_files:
+        print("⚠️ No .mp4 files found in 'videos' folder.")
         return
 
+    video_path = os.path.join(video_folder, video_files[0])  # pick the first .mp4
+
+    # VLC instance with fullscreen
     instance = vlc.Instance(
         "--no-video-title-show",
-        "--loop",
         "--fullscreen",
         "--video-on-top",
         "--no-video-deco"
     )
 
-    media_list = instance.media_list_new(files)
+    media_list = instance.media_list_new([video_path])
     list_player = instance.media_list_player_new()
     list_player.set_media_list(media_list)
+    list_player.set_playback_mode(vlc.PlaybackMode.loop)  # ✅ loop forever
     list_player.play()
 
-    # ensure fullscreen
+    # Ensure fullscreen takes effect
     time.sleep(0.5)
     try:
         mp = list_player.get_media_player()
@@ -57,14 +60,15 @@ def run_vlc_screensaver():
         list_player.stop()
 
 def face_detection_loop():
-    """Continuously detect faces; spawn/kill VLC as needed."""
+    """Continuously runs YOLO face detection and controls VLC screensaver."""
     model = YOLO(MODEL_PATH)
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
+        print("🚫 Could not access webcam.")
         return
 
     screensaver_proc = None
-    no_face_time   = None
+    no_face_time = None
 
     try:
         while True:
@@ -73,14 +77,14 @@ def face_detection_loop():
                 break
 
             results = model(frame, conf=0.4, verbose=False)
-            boxes   = results[0].boxes
+            boxes = results[0].boxes
             face_in_range = False
 
             if boxes is not None:
                 for box in boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    area_px = (x2-x1)*(y2-y1)
-                    distance = A * (area_px ** B)
+                    area = (x2 - x1) * (y2 - y1)
+                    distance = A * (area ** B)
                     if distance < FACE_DISTANCE_THRESHOLD:
                         face_in_range = True
                         break
@@ -96,7 +100,7 @@ def face_detection_loop():
                     no_face_time = time.time()
                 elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
                     if not (screensaver_proc and screensaver_proc.is_alive()):
-                        screensaver_proc = Process(target=run_vlc_screensaver)
+                        screensaver_proc = Process(target=run_vlc_loop_single_video)
                         screensaver_proc.start()
 
             time.sleep(0.1)
