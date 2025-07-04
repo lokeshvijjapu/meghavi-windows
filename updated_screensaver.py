@@ -61,9 +61,11 @@ def run_vlc_loop_all_videos():
     # Add for other platforms if needed
 
     # Add a button to close the player
-    close_button = Button(root, text="Book your service", command=lambda: [list_player.stop(), root.quit()], bg="red", fg="white", font=("Arial", 16))
+    close_button = Button(root, text="Book your service", command=lambda: [list_player.stop(), root.quit()], bg="red", fg="white", font=("Arial", 20), width=15, height=2)
     screen_height = root.winfo_screenheight()
-    close_button.place(x=10, y=screen_height - 50)
+    screen_width = root.winfo_screenwidth()
+    close_button.place(x=screen_width/2 - 80, y=screen_height - 100)
+   # close_button.place(x=10, y=screen_height - 50)
     #close_button.place(x=10, y=10)  # Place at top-left corner
 
     list_player.play()
