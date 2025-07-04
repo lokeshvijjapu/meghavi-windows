@@ -1,10 +1,11 @@
-# ✅ Updated screensaver.py
 import os
 import sys
 import time
 import cv2
 from multiprocessing import Process
 from ultralytics import YOLO
+import tkinter as tk
+from tkinter import Button
 
 # VLC setup
 vlc_path = r"C:\Program Files\VideoLAN\VLC"
@@ -20,7 +21,6 @@ FACE_DISTANCE_THRESHOLD = 110
 NO_FACE_TIMER_SECONDS = 5
 STOP_VLC_FLAG = os.path.join(os.path.dirname(__file__), "stop_vlc.txt")
 
-
 def run_vlc_loop_all_videos():
     video_folder = os.path.join(os.path.dirname(__file__), "videos")
     video_files = [f for f in os.listdir(video_folder) if f.lower().endswith(".mp4")]
@@ -32,7 +32,6 @@ def run_vlc_loop_all_videos():
 
     instance = vlc.Instance(
         "--no-video-title-show",
-        "--fullscreen",
         "--video-on-top",
         "--no-video-deco"
     )
@@ -41,18 +40,48 @@ def run_vlc_loop_all_videos():
     list_player = instance.media_list_player_new()
     list_player.set_media_list(media_list)
     list_player.set_playback_mode(vlc.PlaybackMode.loop)
+
+    # Create Tkinter window
+    root = tk.Tk()
+    root.attributes('-fullscreen', True)
+    root.attributes('-topmost', True)  # Ensure the window stays on top
+    root.bind("<Escape>", lambda e: root.quit())  # Optional: allow Esc to quit
+
+    # Create a frame for video
+    video_frame = tk.Frame(root, bg='black')
+    video_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Get window ID and set it for VLC player
+    if sys.platform == "win32":
+        video_frame_id = video_frame.winfo_id()
+        list_player.get_media_player().set_hwnd(video_frame_id)
+    elif sys.platform == "linux":
+        video_frame_id = video_frame.winfo_id()
+        list_player.get_media_player().set_xwindow(video_frame_id)
+    # Add for other platforms if needed
+
+    # Add a button to close the player
+    close_button = Button(root, text="Book your service", command=lambda: [list_player.stop(), root.quit()], bg="red", fg="white", font=("Arial", 16))
+    screen_height = root.winfo_screenheight()
+    close_button.place(x=10, y=screen_height - 50)
+    #close_button.place(x=10, y=10)  # Place at top-left corner
+
     list_player.play()
 
-    time.sleep(0.5)
-    try:
-        media_player = list_player.get_media_player()
-        media_player.set_fullscreen(True)
-    except:
-        pass
+    # Bring the window to the front and ensure it has focus
+    root.lift()
+    root.focus_force()
 
-    while True:
-        time.sleep(1)
+    # Periodically check for stop flag
+    def check_stop_flag():
+        if os.path.exists(STOP_VLC_FLAG):
+            list_player.stop()
+            root.quit()
+        else:
+            root.after(1000, check_stop_flag)
 
+    root.after(1000, check_stop_flag)
+    root.mainloop()
 
 def face_detection_loop():
     model = YOLO(MODEL_PATH)
@@ -111,7 +140,6 @@ def face_detection_loop():
         if screensaver_proc and screensaver_proc.is_alive():
             screensaver_proc.terminate()
             screensaver_proc.join()
-
 
 if __name__ == "__main__":
     face_detection_loop()
