@@ -13,12 +13,13 @@ os.environ["PATH"] = vlc_path + os.pathsep + os.environ["PATH"]
 os.environ["VLC_PLUGIN_PATH"] = vlc_path
 import vlc
 
-# Face detection constants
+# Constants
 A = 9703.20
 B = -0.4911842338691967
 MODEL_PATH = "models/model.pt"
 FACE_DISTANCE_THRESHOLD = 110
 NO_FACE_TIMER_SECONDS = 5
+COOLDOWN_SECONDS = 10
 STOP_VLC_FLAG = os.path.join(os.path.dirname(__file__), "stop_vlc.txt")
 
 def run_vlc_loop_all_videos():
@@ -41,42 +42,45 @@ def run_vlc_loop_all_videos():
     list_player.set_media_list(media_list)
     list_player.set_playback_mode(vlc.PlaybackMode.loop)
 
-    # Create Tkinter window
+    # Create Tkinter fullscreen window
     root = tk.Tk()
     root.attributes('-fullscreen', True)
-    root.attributes('-topmost', True)  # Ensure the window stays on top
-    root.bind("<Escape>", lambda e: root.quit())  # Optional: allow Esc to quit
+    root.attributes('-topmost', True)
+    root.bind("<Escape>", lambda e: root.quit())
 
-    # Create a frame for video
     video_frame = tk.Frame(root, bg='black')
     video_frame.pack(fill=tk.BOTH, expand=True)
 
-    # Get window ID and set it for VLC player
     if sys.platform == "win32":
         video_frame_id = video_frame.winfo_id()
         list_player.get_media_player().set_hwnd(video_frame_id)
     elif sys.platform == "linux":
         video_frame_id = video_frame.winfo_id()
         list_player.get_media_player().set_xwindow(video_frame_id)
-    # Add for other platforms if needed
 
-    # Add a button to close the player
-    close_button = Button(root, text="Book your service", command=lambda: [list_player.stop(), root.quit()], bg="red", fg="white", font=("Arial", 20), width=15, height=2)
+    # Book button logic with stop flag
+    close_button = Button(
+        root,
+        text="Book your service",
+        command=lambda: [
+            print("🟡 Book button pressed — writing stop flag"),
+            open(STOP_VLC_FLAG, 'w').close(),
+            list_player.stop(),
+            root.quit()
+        ],
+        bg="red", fg="white", font=("Arial", 60), width=20, height=1
+    )
     screen_height = root.winfo_screenheight()
     screen_width = root.winfo_screenwidth()
-    close_button.place(x=screen_width/2 - 80, y=screen_height - 100)
-   # close_button.place(x=10, y=screen_height - 50)
-    #close_button.place(x=10, y=10)  # Place at top-left corner
+    close_button.place(x=screen_width / 2 - 1000, y=screen_height - 150)
 
     list_player.play()
-
-    # Bring the window to the front and ensure it has focus
     root.lift()
     root.focus_force()
 
-    # Periodically check for stop flag
     def check_stop_flag():
         if os.path.exists(STOP_VLC_FLAG):
+            print("🟥 Detected stop_vlc.txt — closing screensaver")
             list_player.stop()
             root.quit()
         else:
@@ -94,15 +98,19 @@ def face_detection_loop():
 
     screensaver_proc = None
     no_face_time = None
+    cooldown_until = 0  # ⏳ Cooldown timer to prevent restart after manual stop
 
     try:
         while True:
+            # Handle stop flag
             if os.path.exists(STOP_VLC_FLAG):
+                print("🟥 STOP flag detected — closing VLC and entering cooldown")
                 if screensaver_proc and screensaver_proc.is_alive():
                     screensaver_proc.terminate()
                     screensaver_proc.join()
                     screensaver_proc = None
                 os.remove(STOP_VLC_FLAG)
+                cooldown_until = time.time() + COOLDOWN_SECONDS
 
             ret, frame = cap.read()
             if not ret:
@@ -124,6 +132,7 @@ def face_detection_loop():
             if face_in_range:
                 no_face_time = None
                 if screensaver_proc and screensaver_proc.is_alive():
+                    print("🟢 Face detected — stopping screensaver")
                     screensaver_proc.terminate()
                     screensaver_proc.join()
                     screensaver_proc = None
@@ -131,7 +140,10 @@ def face_detection_loop():
                 if no_face_time is None:
                     no_face_time = time.time()
                 elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
-                    if not (screensaver_proc and screensaver_proc.is_alive()):
+                    if time.time() < cooldown_until:
+                        print("⏳ In cooldown — not restarting screensaver")
+                    elif not (screensaver_proc and screensaver_proc.is_alive()):
+                        print("🟡 No face & cooldown passed — launching screensaver")
                         screensaver_proc = Process(target=run_vlc_loop_all_videos)
                         screensaver_proc.start()
 
