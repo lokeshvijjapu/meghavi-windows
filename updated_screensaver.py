@@ -92,13 +92,13 @@ def run_vlc_loop_all_videos():
 def face_detection_loop():
     model = YOLO(MODEL_PATH)
     cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("🚫 Could not access webcam.")
-        return
+    camera_working = cap.isOpened()
+    if not camera_working:
+        print("🚫 Could not access webcam. Assuming no human is present.")
 
     screensaver_proc = None
     no_face_time = None
-    cooldown_until = 0  # ⏳ Cooldown timer to prevent restart after manual stop
+    cooldown_until = 0
 
     try:
         while True:
@@ -111,46 +111,62 @@ def face_detection_loop():
                     screensaver_proc = None
                 os.remove(STOP_VLC_FLAG)
                 cooldown_until = time.time() + COOLDOWN_SECONDS
+                continue
 
-            ret, frame = cap.read()
-            if not ret:
-                break
+            if camera_working:
+                ret, frame = cap.read()
+                if not ret:
+                    print("⚠️ Failed to grab frame. Assuming no human is present.")
+                    camera_working = False
+                    continue
 
-            results = model(frame, conf=0.4, verbose=False)
-            boxes = results[0].boxes
-            face_in_range = False
+                results = model(frame, conf=0.4, verbose=False)
+                boxes = results[0].boxes
+                face_in_range = False
 
-            if boxes is not None:
-                for box in boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    area = (x2 - x1) * (y2 - y1)
-                    distance = A * (area ** B)
-                    if distance < FACE_DISTANCE_THRESHOLD:
-                        face_in_range = True
-                        break
+                if boxes is not None:
+                    for box in boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        area = (x2 - x1) * (y2 - y1)
+                        distance = A * (area ** B)
+                        if distance < FACE_DISTANCE_THRESHOLD:
+                            face_in_range = True
+                            break
 
-            if face_in_range:
-                no_face_time = None
-                if screensaver_proc and screensaver_proc.is_alive():
-                    print("🟢 Face detected — stopping screensaver")
-                    screensaver_proc.terminate()
-                    screensaver_proc.join()
-                    screensaver_proc = None
+                if face_in_range:
+                    no_face_time = None
+                    if screensaver_proc and screensaver_proc.is_alive():
+                        print("🟢 Face detected — stopping screensaver")
+                        screensaver_proc.terminate()
+                        screensaver_proc.join()
+                        screensaver_proc = None
+                else:
+                    if no_face_time is None:
+                        no_face_time = time.time()
+                    elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
+                        if time.time() < cooldown_until:
+                            print("⏳ In cooldown — not restarting screensaver")
+                        elif not (screensaver_proc and screensaver_proc.is_alive()):
+                            print("🟡 No face & cooldown passed — launching screensaver")
+                            screensaver_proc = Process(target=run_vlc_loop_all_videos)
+                            screensaver_proc.start()
             else:
+                # Camera not working, assume no human is present
                 if no_face_time is None:
                     no_face_time = time.time()
                 elif time.time() - no_face_time >= NO_FACE_TIMER_SECONDS:
                     if time.time() < cooldown_until:
                         print("⏳ In cooldown — not restarting screensaver")
                     elif not (screensaver_proc and screensaver_proc.is_alive()):
-                        print("🟡 No face & cooldown passed — launching screensaver")
+                        print("🟡 Camera not working & cooldown passed — launching screensaver")
                         screensaver_proc = Process(target=run_vlc_loop_all_videos)
                         screensaver_proc.start()
 
             time.sleep(0.1)
 
     finally:
-        cap.release()
+        if camera_working:
+            cap.release()
         if screensaver_proc and screensaver_proc.is_alive():
             screensaver_proc.terminate()
             screensaver_proc.join()
