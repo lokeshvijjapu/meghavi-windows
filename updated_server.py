@@ -1,4 +1,4 @@
-# ✅ Updated server.py with /url_matched logic
+# ✅ Updated server.py with /url_matched logic and improved screensaver control
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
 from flask_cors import CORS
 import os
@@ -31,17 +31,28 @@ def open_screensaver():
     if _screensaver_proc is None or _screensaver_proc.poll() is not None:
         script = os.path.join(os.path.dirname(__file__), 'screensaver.py')
         _screensaver_proc = subprocess.Popen([sys.executable, script])
-
+        print(f"🟢 Started screensaver process with PID: {_screensaver_proc.pid}")
 
 def close_screensaver():
     global _screensaver_proc
-    if _screensaver_proc and _screensaver_proc.poll() is None:
-        _screensaver_proc.terminate()
-        try:
-            _screensaver_proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            _screensaver_proc.kill()
+    if _screensaver_proc is not None and _screensaver_proc.poll() is None:
+        print(f"🟡 Attempting to stop screensaver process with PID: {_screensaver_proc.pid}")
+        # Signal the screensaver to stop gracefully
+        with open(STOP_VLC_FLAG, "w") as f:
+            f.write("stop")
+        time.sleep(2)  # Give it 2 seconds to stop
+        if _screensaver_proc.poll() is None:
+            print(f"🟠 Screensaver did not stop gracefully, terminating process...")
+            _screensaver_proc.terminate()
+            try:
+                _screensaver_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                print(f"🔴 Screensaver process did not terminate, killing...")
+                _screensaver_proc.kill()
         _screensaver_proc = None
+        print(f"🟢 Screensaver process stopped.")
+    else:
+        print(f"🟢 No active screensaver process to stop.")
 
 # --- URL matched endpoint from Chrome extension
 @app.route('/url_matched', methods=['POST'])
