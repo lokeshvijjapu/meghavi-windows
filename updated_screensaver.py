@@ -5,11 +5,11 @@ import cv2
 from multiprocessing import Process
 from ultralytics import YOLO
 import tkinter as tk
-from tkinter import Button
+import ctypes  # for mouse click detection
 
 # VLC setup
 vlc_path = r"C:\Program Files\VideoLAN\VLC"
-os.environ["PATH"] = vlc_path + os.pathsep + os.environ["PATH"]
+os.environ["PATH"] = vlc_path + os.pathsep + os.environ.get("PATH", "")
 os.environ["VLC_PLUGIN_PATH"] = vlc_path
 import vlc
 
@@ -21,6 +21,7 @@ FACE_DISTANCE_THRESHOLD = 110
 NO_FACE_TIMER_SECONDS = 5
 COOLDOWN_SECONDS = 10
 STOP_VLC_FLAG = os.path.join(os.path.dirname(__file__), "stop_vlc.txt")
+
 
 def run_vlc_loop_all_videos():
     video_folder = os.path.join(os.path.dirname(__file__), "videos")
@@ -46,8 +47,12 @@ def run_vlc_loop_all_videos():
     root = tk.Tk()
     root.attributes('-fullscreen', True)
     root.attributes('-topmost', True)
-    root.bind("<Escape>", lambda e: root.quit())
+    root.overrideredirect(True)  # remove window decorations
 
+    # Close on Escape
+    root.bind("<Escape>", lambda e: on_click_override(list_player, root))
+
+    # VLC video frame
     video_frame = tk.Frame(root, bg='black')
     video_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -58,36 +63,34 @@ def run_vlc_loop_all_videos():
         video_frame_id = video_frame.winfo_id()
         list_player.get_media_player().set_xwindow(video_frame_id)
 
-    # Book button logic with stop flag
-    close_button = Button(
-        root,
-        text="Book your service",
-        command=lambda: [
-            print("🟡 Book button pressed — writing stop flag"),
-            open(STOP_VLC_FLAG, 'w').close(),
-            list_player.stop(),
-            root.quit()
-        ],
-        bg="red", fg="white", font=("Arial", 60), width=20, height=1
-    )
-    screen_height = root.winfo_screenheight()
-    screen_width = root.winfo_screenwidth()
-    close_button.place(x=screen_width / 2 - 1000, y=screen_height - 150)
-
     list_player.play()
     root.lift()
     root.focus_force()
 
-    def check_stop_flag():
+    def on_click_override(player, window):
+        print("🟡 Click detected — writing stop flag and closing VLC")
+        with open(STOP_VLC_FLAG, 'w'):
+            pass
+        player.stop()
+        window.quit()
+
+    # Periodically check for click or external stop flag
+    def check_events():
+        # External stop flag
         if os.path.exists(STOP_VLC_FLAG):
             print("🟥 Detected stop_vlc.txt — closing screensaver")
             list_player.stop()
             root.quit()
-        else:
-            root.after(1000, check_stop_flag)
+            return
+        # Check left mouse button
+        if ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000:
+            on_click_override(list_player, root)
+            return
+        root.after(100, check_events)
 
-    root.after(1000, check_stop_flag)
+    root.after(100, check_events)
     root.mainloop()
+
 
 def face_detection_loop():
     model = YOLO(MODEL_PATH)
