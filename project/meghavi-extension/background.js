@@ -1,4 +1,4 @@
-const targetUrl = "https://meghavi-kiosk-outlet.onrender.com/shop/67e22caf39c9f87925bea576/RelaxationTherapy";
+const targetUrl = "https://outlet.meghaviwellness.co.in/shop/RelaxationTherapy";
 
 // ⏱️ Change this to control how often "left" signals are sent (in milliseconds)
 const CHECK_INTERVAL_MS = 2000;
