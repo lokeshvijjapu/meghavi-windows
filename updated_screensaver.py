@@ -16,7 +16,7 @@ import vlc
 A = 9703.20
 B = -0.4911842338691967
 MODEL_PATH = "models/model.pt"
-FACE_DISTANCE_THRESHOLD = 110
+FACE_DISTANCE_THRESHOLD = 180
 NO_FACE_TIMER_SECONDS = 5
 COOLDOWN_SECONDS = 10
 STOP_VLC_FLAG = os.path.join(os.path.dirname(__file__), "stop_vlc.txt")
@@ -110,10 +110,10 @@ def run_vlc_loop_all_videos():
     # **Explicitly sized** sky-blue, rounded button
     book_btn = RoundedButton(
         root,
-        text="Book your service",
+        text="Book Your Service Here",
         radius=30,                  # corner roundness
         padding=40,                 # still used if width/height not set
-        width=220,                  # explicit width in pixels
+        width=300,                  # explicit width in pixels
         height=90,                 # explicit height in pixels
         font=("Arial", 20),         # text size
         bg="skyblue",
