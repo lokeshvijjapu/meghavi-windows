@@ -29,7 +29,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "fiveAM" || alarm.name === "tenPM") {
-    fetch("http://127.0.0.1:5001/trigger-download", {
+    fetch("http://127.0.0.1:5000/trigger-download", {
       method: "POST"
     })
     .then(res => res.text())
