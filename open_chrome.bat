@@ -1,6 +1,6 @@
 @echo off
 start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
-  --kiosk "https://meghavi-kiosk-outlet.onrender.com/shop/67e22caf39c9f87925bea576/RelaxationTherapy" ^
+  --kiosk "file:///C:/Users/lokes/Downloads/meghavi-windows-main/meghavi-windows-main/offline.html" ^
   --disable-notifications ^
   --disable-infobars ^
   --disable-session-crashed-bubble ^
