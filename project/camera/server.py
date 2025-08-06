@@ -1,29 +1,37 @@
+# ✅ Updated server.py with /url_matched logic
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
-import subprocess
-import signal
+from flask_cors import CORS
 import os
 import requests
 import zipfile
+import shutil
+import time
 from io import BytesIO
 from datetime import datetime
-import atexit
-import glob
+import subprocess
 import sys
+import glob
 
 app = Flask(__name__)
+CORS(app)
 
-# global handle
+# Global screensaver process handle
 _screensaver_proc = None
 
-DOWNLOAD_URL = "http://meghavi-kiosk-api.onrender.com/api/videos/download-all"
-EXTRACT_DIR = "downloaded_videos"
+# Paths
+DOWNLOAD_URL = "http://api.meghaviwellness.co.in/api/videos/download-all"
 VIDEO_FOLDER = os.path.join(os.path.dirname(__file__), 'videos')
+TEMP_FOLDER = os.path.join(os.path.dirname(__file__), 'videos_new')
+STOP_VLC_FLAG = os.path.join(os.path.dirname(__file__), 'stop_vlc.txt')
+
+# --- Screensaver process control
 
 def open_screensaver():
     global _screensaver_proc
     if _screensaver_proc is None or _screensaver_proc.poll() is not None:
         script = os.path.join(os.path.dirname(__file__), 'screensaver.py')
         _screensaver_proc = subprocess.Popen([sys.executable, script])
+
 
 def close_screensaver():
     global _screensaver_proc
@@ -32,18 +40,28 @@ def close_screensaver():
         try:
             _screensaver_proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            print("[server.py] Terminate timed out, killing screensaver.py")
             _screensaver_proc.kill()
         _screensaver_proc = None
 
-# --- Cleanup screensaver.py process on exit
+# --- URL matched endpoint from Chrome extension
+@app.route('/url_matched', methods=['POST'])
+def url_matched():
+    data = request.get_json()
+    status = data.get("status")
+    url = data.get("url")
 
-def cleanup_screensaver():
-    close_screensaver()
+    if status == "entered":
+        print(f"✅ ENTERED target page: {url} — launching screensaver")
+        open_screensaver()
+    elif status == "left":
+        print(f"🚪 LEFT target page: {url} — closing screensaver")
+        close_screensaver()
+    else:
+        print(f"⚠️ Unknown URL event: {data}")
 
-atexit.register(cleanup_screensaver)
+    return jsonify({"status": "received"}), 200
 
-# --- Video screensaver page and video serving
+# --- Video preview page
 @app.route('/')
 def index():
     video_files = [os.path.basename(f) for f in glob.glob(os.path.join(VIDEO_FOLDER, '*.mp4'))]
@@ -81,51 +99,47 @@ def index():
 def serve_video(filename):
     return send_from_directory(VIDEO_FOLDER, filename)
 
-# --- Process control for screensaver.py
-@app.route('/url_matched', methods=['POST'])
-def url_matched():
-    data = request.get_json()
-    status = data.get("status")
-    url = data.get("url")
-
-    if status == "entered":
-        print(f"✅ User ENTERED target page: {url} - Starting screensaver.py")
-        open_screensaver()
-    elif status == "left":
-        print(f"🚪 User LEFT target page. Now on: {url} - Stopping screensaver.py")
-        close_screensaver()
-    else:
-        print(f"⚠️ Unknown status: {data}")
-    
-    return jsonify({"status": "received"}), 200
-
+# --- Triggered by Chrome extension or scheduled alarm
 @app.route('/trigger-download', methods=['POST'])
 def trigger_download():
     try:
-        print(f"[{datetime.now()}] Download started...")
+        print(f"[{datetime.now()}] 🔔 Triggered video update...")
 
+        # Signal to stop VLC
+        with open(STOP_VLC_FLAG, "w") as f:
+            f.write("stop")
+
+        # Wait for VLC to release files
+        for attempt in range(5):
+            try:
+                if os.path.exists(VIDEO_FOLDER):
+                    shutil.rmtree(VIDEO_FOLDER)
+                break
+            except Exception as e:
+                print(f"⏳ Attempt {attempt+1}/5 — Waiting for VLC to release video files... {e}")
+                time.sleep(1)
+        else:
+            return jsonify({"error": "Could not delete videos folder after 5 tries"}), 500
+
+        # Download video ZIP
         response = requests.get(DOWNLOAD_URL)
         if response.status_code != 200:
-            return jsonify({"error": "Failed to download zip"}), 500
+            return jsonify({"error": "Failed to download video zip"}), 500
 
+        # Extract to temp
+        if os.path.exists(TEMP_FOLDER):
+            shutil.rmtree(TEMP_FOLDER)
         with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
-            os.makedirs(EXTRACT_DIR, exist_ok=True)
-            zip_ref.extractall(EXTRACT_DIR)
+            os.makedirs(TEMP_FOLDER, exist_ok=True)
+            zip_ref.extractall(TEMP_FOLDER)
 
-        # Remove the old 'videos' folder if it exists
-        videos_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
-        if os.path.exists(videos_path):
-            import shutil
-            shutil.rmtree(videos_path)
-        # Rename the extracted folder to 'videos'
-        extracted_full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), EXTRACT_DIR)
-        os.rename(extracted_full_path, videos_path)
+        os.rename(TEMP_FOLDER, VIDEO_FOLDER)
 
-        print(f"[{datetime.now()}] Download complete. Extracted to 'videos'")
-        return jsonify({"status": "Downloaded and extracted, videos folder replaced"}), 200
+        print(f"[{datetime.now()}] ✅ Video update completed.")
+        return jsonify({"status": "Videos updated successfully"}), 200
 
     except Exception as e:
-        print("❌ Error:", e)
+        print(f"❌ Error in /trigger-download: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
