@@ -1,0 +1,1 @@
+write an .vbs file based on the wifi_server.bat file location

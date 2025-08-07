@@ -1,0 +1,1 @@
+write an .bat file based on the wifi_server.py file location 

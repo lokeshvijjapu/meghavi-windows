@@ -1,0 +1,1 @@
+write an vbs file based on the start_foldermill_controlpanel.bat file location
