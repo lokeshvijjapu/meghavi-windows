@@ -12,6 +12,8 @@ os.environ["PATH"] = vlc_path + os.pathsep + os.environ["PATH"]
 os.environ["VLC_PLUGIN_PATH"] = vlc_path
 import vlc
 
+
+
 # Constants
 A = 9703.20
 B = -0.4911842338691967
